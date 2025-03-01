@@ -14,7 +14,7 @@ This tool combines two essential utilities for Dell BIOS management:
 Instructions:
 ------------
 - Run DellBIOSTools.exe to start the application
-- Patched BIOS files will be saved in the "Patched_BIOS" folder
+- Patched BIOS files will be saved in path displayed in window
 - Use the tabs at the top to switch between tools
 
 For BIOS Unlocker:
