@@ -1,0 +1,35 @@
+Dell BIOS Tools
+==============
+
+This tool combines two essential utilities for Dell BIOS management:
+
+1. BIOS Unlocker (8FC8 Patcher)
+   - Helps unlock Dell BIOS by patching specific patterns
+   - Works with 8FC8 suffix systems
+
+2. Password Generator
+   - Generates master passwords for Dell systems based on service tag
+   - Supports multiple tag types (595B, D35B, 2A7B, 1D3B, 1F66, etc.)
+
+Instructions:
+------------
+- Run DellBIOSTools.exe to start the application
+- Patched BIOS files will be saved in the "Patched_BIOS" folder
+- Use the tabs at the top to switch between tools
+
+For BIOS Unlocker:
+1. Click "Browse" to select your BIOS file
+2. Click "Patch BIOS" to apply the patch
+3. After patching, you'll need to reboot your device
+4. When prompted that "The Service Tag has not been programmed", input your Service Tag
+5. The device will reboot again and you should be able to boot to Windows
+
+For Password Generator:
+1. Enter your 7-character Dell Service Tag followed by the 4-character tag suffix
+2. Click "Compute Password" to generate the BIOS master password
+3. Use the generated password to unlock your Dell system
+
+NOTE: Use at your own risk. Improper BIOS modification can damage your system.
+
+Based on the original tools by Rex98 & Techshack Cebu 
+Based on research by Dogbert and Asyncritus. Python scripts courtesy of chromebreakerdev.
