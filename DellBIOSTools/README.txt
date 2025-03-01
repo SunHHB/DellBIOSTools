@@ -20,7 +20,7 @@ Instructions:
 For BIOS Unlocker:
 1. Click "Browse" to select your BIOS file
 2. Click "Patch BIOS" to apply the patch
-3. After patching, you'll need to reboot your device
+3. After patching, you'll need to update your device with the patched bios file and reboot 
 4. When prompted that "The Service Tag has not been programmed", input your Service Tag
 5. The device will reboot again and you should be able to boot to Windows
 
