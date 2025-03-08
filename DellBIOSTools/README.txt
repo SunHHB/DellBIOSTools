@@ -17,6 +17,8 @@ Instructions:
 - Patched BIOS files will be saved in path displayed in window
 - Use the tabs at the top to switch between tools
 
+For instructions on how to use the ch341a Bios programmer, you can go here..https://winraid.level1techs.com/t/guide-flash-bios-with-ch341a-programmer/32948
+
 For BIOS Unlocker:
 1. Click "Browse" to select your BIOS file
 2. Click "Patch BIOS" to apply the patch
