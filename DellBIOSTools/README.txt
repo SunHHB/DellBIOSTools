@@ -17,7 +17,9 @@ Instructions:
 - Patched BIOS files will be saved in path displayed in window
 - Use the tabs at the top to switch between tools
 
-For instructions on how to use the ch341a Bios programmer, you can go here..https://winraid.level1techs.com/t/guide-flash-bios-with-ch341a-programmer/32948
+For instructions on how to use the ch341a Bios programmer, you can go here..https://winraid.level1techs.com/t/guide-flash-bios-with-ch341a-programmer/32948 
+
+YOU SHOULD ALWAYS SAVE A BACKUP OF YOUR ORIGINAL BIOS BIN FILE BEFORE PATCHING !
 
 For BIOS Unlocker:
 1. Click "Browse" to select your BIOS file
@@ -25,6 +27,7 @@ For BIOS Unlocker:
 3. After patching, you'll need to update your device with the patched bios file and reboot 
 4. When prompted that "The Service Tag has not been programmed", input your Service Tag
 5. The device will reboot again and you should be able to boot to Windows
+
 
 For Password Generator:
 1. Enter your 7-character Dell Service Tag followed by the 4-character tag suffix
