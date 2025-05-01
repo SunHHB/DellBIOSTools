@@ -971,7 +971,7 @@ class ServiceTagExtractorTab:
 class DellToolsApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Dell BIOS Tools.V2")
+        self.root.title("Dell BIOS Tools.V2.1")
         self.root.geometry("650x580")
         self.root.configure(bg="#36454F")
 
