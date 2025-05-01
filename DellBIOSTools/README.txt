@@ -16,7 +16,7 @@ This tool combines two essential utilities for Dell BIOS management:
 
 Instructions:
 ------------
-- Run Dell_8FC8_Patcher.pyw to start the application
+- Run DellBiosTools.pyw to start the application
 - Patched BIOS files will be saved in path displayed in window
 - Use the tabs at the top to switch between tools
 
