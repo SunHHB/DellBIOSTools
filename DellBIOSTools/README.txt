@@ -3,7 +3,7 @@ Dell BIOS Tools
 
 This tool combines two essential utilities for Dell BIOS management:
 
-1. BIOS Unlocker (8FC8 Patcher)
+1. Dell (8FC8 Patcher)
    - Helps unlock Dell BIOS by patching specific patterns
    - Works with 8FC8 suffix systems
 
@@ -13,7 +13,7 @@ This tool combines two essential utilities for Dell BIOS management:
 
 Instructions:
 ------------
-- Run DellBIOSTools.exe to start the application
+- Run Dell_8FC8_Patcher.pyw to start the application
 - Patched BIOS files will be saved in path displayed in window
 - Use the tabs at the top to switch between tools
 
