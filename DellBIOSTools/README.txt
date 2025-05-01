@@ -11,6 +11,9 @@ This tool combines two essential utilities for Dell BIOS management:
    - Generates master passwords for Dell systems based on service tag
    - Supports multiple tag types (595B, D35B, 2A7B, 1D3B, 1F66, etc.)
 
+3. Service Tag extractor
+   -Extracts Service Tag value from the bin file  
+
 Instructions:
 ------------
 - Run Dell_8FC8_Patcher.pyw to start the application
@@ -33,6 +36,10 @@ For Password Generator:
 1. Enter your 7-character Dell Service Tag followed by the 4-character tag suffix
 2. Click "Compute Password" to generate the BIOS master password
 3. Use the generated password to unlock your Dell system
+
+For Service Tag Extractor:
+1.Load your Dell Bin file
+2.Click Extract Tags..be patient will take some time. 
 
 NOTE: Use at your own risk. Improper BIOS modification can damage your system.
 
