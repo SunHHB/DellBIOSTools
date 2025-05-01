@@ -1,7 +1,7 @@
 Dell BIOS Tools
 ==============
 
-This tool combines two essential utilities for Dell BIOS management:
+This tool combines three essential utilities for Dell BIOS management:
 
 1. Dell (8FC8 Patcher)
    - Helps unlock Dell BIOS by patching specific patterns
