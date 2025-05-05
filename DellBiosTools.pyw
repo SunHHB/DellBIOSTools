@@ -836,7 +836,7 @@ class PasswordGeneratorTab:
         self.result_display.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
         # Note
-        note_text = "Note: For 8FC8 suffixes, use the 'Patch BIOS' tool instead."
+        note_text = "Note: For 8FC8 suffixes, use the 'BIOS Unlocker' tool instead."
         note_label = tk.Label(frame, text=note_text, fg="red", font=("Arial", 9))
         note_label.pack(pady=5)
 
