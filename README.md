@@ -3,8 +3,7 @@
 
 Requirements:
 -------------
-- Python 3.12 or greater is required to run the Python code  
-  Download here: https://www.python.org/downloads/release/python-3120/
+- Python 3.12 or greater is required to run the Python code 
 
 Preview:
 --------
