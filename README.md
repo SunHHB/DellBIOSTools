@@ -18,18 +18,20 @@ To create a standalone EXE without worrying about Python setup:
 1. Download this repo as ZIP and extract it.
 2. Double-click:
 
-    build_dellbiostools.bat
+    builddellbiostools.bat
 
 3. The script will:
    - Check if Python 3.12+ is installed
-   - If missing, install it automatically (via Winget or python.org)
+   - If missing, install it automatically
    - Upgrade pip and install PyInstaller
-   - Compile DellBiosTools.pyw into DellBiosTools.exe
+   - Compile DellBiosTools.pyw into a standalone EXE
+   - Embed the custom icon from the icon folder (if present)
+   - Rename the EXE with a timestamp so Windows Explorer always shows the correct icon
    - Place the finished EXE in the project folder
 
-When it finishes, you’ll see:
+When it finishes, you’ll see something like:
 
-    DellBiosTools.exe
+    DellBiosTools-2025-09-03_0955.exe
 
 in the same folder. ✅
 
@@ -39,7 +41,7 @@ in the same folder. ✅
 If you prefer to build manually:
 
 1. Install Python 3.12+ from:
-   https://www.python.org/downloads/release/python-3120/
+   https://www.python.org/downloads/windows/
    (Check “Add Python to PATH” during install)
 
 2. Open Command Prompt in this repo folder.
@@ -51,7 +53,7 @@ If you prefer to build manually:
 
 4. Build the EXE:
 
-   pyinstaller --noconfirm --onefile --windowed DellBiosTools.pyw
+   pyinstaller --noconfirm --onefile --windowed --icon icon\DellBiosTools.ico DellBiosTools.pyw
 
 5. The EXE will appear at:
 
@@ -66,34 +68,39 @@ If you prefer to build manually:
 ------------------------------------------------------------
 🛠 Usage
 
-This tool combines three essential utilities for Dell BIOS management:
+This tool combines four essential utilities for Dell BIOS management:
 
 1. Dell (8FC8 Patcher)
-   - Helps unlock Dell BIOS by patching specific patterns
-   - Works with 8FC8 suffix systems
-
-   Steps:
-   - Click "Browse" to select your BIOS file
-   - Click "Patch BIOS" to apply the patch
-   - After patching, update your device with the patched BIOS file and reboot
-   - When prompted that "The Service Tag has not been programmed", input your Service Tag
-   - The device will reboot again and should boot to Windows
+   - Unlocks Dell BIOS by patching specific 8FC8 suffix patterns
+   - Steps:
+     - Click "Browse" to select your BIOS file
+     - Click "Patch BIOS" to apply the patch
+     - Flash the patched BIOS and reboot
+     - When prompted that "The Service Tag has not been programmed", enter your Service Tag
+     - Reboot again, and the system should boot to Windows
 
 2. Password Generator
-   - Generates master passwords for Dell systems based on service tag
+   - Generates Dell master passwords from service tags
    - Supports multiple tag types (595B, D35B, 2A7B, 1D3B, 1F66, etc.)
-
-   Steps:
-   - Enter your 7-character Dell Service Tag followed by the 4-character tag suffix
-   - Click "Compute Password" to generate the BIOS master password
-   - Use the generated password to unlock your Dell system
+   - Steps:
+     - Enter your 7-character Service Tag plus the 4-character suffix
+     - Click "Compute Password"
+     - Use the generated password to unlock your Dell system
 
 3. Service Tag Extractor
    - Extracts Service Tag values from .bin BIOS files
+   - Steps:
+     - Load your Dell .bin file
+     - Click "Extract Tags" (may take some time)
 
-   Steps:
-   - Load your Dell .bin file
-   - Click "Extract Tags" (this may take some time)
+4. Asset Manager (NEW in V2.1)
+   - View and update Dell Asset Tag values directly
+   - Useful for IT inventory, service tracking, and post-repair validation
+   - Steps:
+     - Open the Asset Manager tab
+     - View the current Asset Tag stored in the BIOS
+     - Enter a new Asset Tag (if needed) and click "Update"
+     - Reboot to apply changes
 
 ------------------------------------------------------------
 ⚠️ Disclaimer
