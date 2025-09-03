@@ -112,6 +112,11 @@ from the use of this program.
 
 👉 Always back up your BIOS before patching and test in a safe environment.
 
+⚠️ Important Note: Building the EXE with PyInstaller may trigger antivirus
+false positives. This is a common issue with Python-packed executables.
+If flagged, add an exclusion for the folder or use the raw Python version
+(`DellBiosTools.pyw`) instead.
+
 ------------------------------------------------------------
 📜 License
 
