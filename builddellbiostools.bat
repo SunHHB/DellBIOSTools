@@ -1,83 +1,91 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal EnableExtensions
+
+rem --- Refuse to run from System32 or as Admin (causes PyInstaller error) ---
+if /I "%CD%"=="C:\Windows\System32" (
+  echo [!] Don't run from C:\Windows\System32. Open this folder in Explorer, type CMD in the address bar, and run again.
+  pause & exit /b 1
+)
+net session >nul 2>&1
+if %ERRORLEVEL%==0 (
+  echo [!] You're running as Administrator. Close this window and run as a normal user.
+  pause & exit /b 1
+)
 
 echo =====================================
-echo   DellBiosTools - Build EXE
+echo   DellBiosTools - Build EXE (local)
 echo =====================================
+echo [i] Working dir: %CD%
 echo.
 
-pushd %~dp0
+set "APP_NAME=DellBiosTools"
+set "ENTRY=DellBiosTools.pyw"
+set "ICONDIR=%CD%\icon"
+set "ICONFILE=%ICONDIR%\DellBiosTools.ico"
+set "WORK=__pyi_tmp\build"
+set "SPEC=__pyi_tmp\spec"
 
-:: ---------- 1) Check Python ----------
-echo [*] Checking for Python...
-where python
-if errorlevel 1 (
-  where py
-  if errorlevel 1 (
-    echo [!] Python not found.
-    echo     The script will attempt to install Python.
-  ) else (
-    set "PYEXE=py"
-  )
+if not exist "%ENTRY%" (
+  echo [!] %ENTRY% not found in this folder.
+  pause & exit /b 1
+)
+
+rem --- ICON handling ---
+set "ICONARG="
+if exist "%ICONFILE%" (
+  set "ICONARG=--icon ""%ICONFILE%"""
+  echo [OK] Icon will be embedded: %ICONFILE%
 ) else (
-  set "PYEXE=python"
+  echo [i] No icon found in: %ICONFILE%
 )
 
-:: ---------- 2) If missing, try Winget ----------
-if not defined PYEXE (
-  echo [*] Trying to install Python via Winget...
-  winget install -e --id Python.Python.3 --accept-package-agreements --accept-source-agreements
+echo [*] Ensuring PyInstaller is available...
+python -m pip install --upgrade pip pyinstaller || (
+  echo [!] pip/pyinstaller step failed.
+  pause & exit /b 1
 )
 
-:: ---------- 3) If still missing, download installer ----------
-if not defined PYEXE (
-  where python && set "PYEXE=python"
-  if not defined PYEXE where py && set "PYEXE=py"
+echo [*] Building...
+python -m PyInstaller -F -w --clean --noconfirm ^
+  -n "%APP_NAME%" ^
+  --distpath "." ^
+  --workpath "%WORK%" ^
+  --specpath "%SPEC%" ^
+  %ICONARG% ^
+  "%ENTRY%"
+if errorlevel 1 (
+  echo [!] Build failed.
+  pause & exit /b 1
 )
 
-if not defined PYEXE (
-  echo [*] Downloading Python installer...
-  set "PY_VER=3.12.5"
-  set "PY_URL=https://www.python.org/ftp/python/%PY_VER%/python-%PY_VER%-amd64.exe"
-  set "TMP_EXE=%TEMP%\python-installer-%RANDOM%.exe"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%TMP_EXE%'"
-  "%TMP_EXE%" /quiet PrependPath=1 Include_pip=1 Shortcuts=0
-  timeout /t 8
-  set "PYEXE=python"
+echo [*] Cleaning temp...
+rmdir /s /q "__pyi_tmp" >nul 2>&1
+
+rem --- Generate timestamp for unique filename ---
+for /f "tokens=1-4 delims=/ " %%a in ("%date%") do (
+  set mm=%%a
+  set dd=%%b
+  set yyyy=%%c
+)
+for /f "tokens=1-2 delims=:." %%h in ("%time%") do (
+  set hh=%%h
+  set nn=%%i
+)
+set hh=0%hh%
+set hh=%hh:~-2%
+set nn=0%nn%
+set nn=%nn:~-2%
+
+set "STAMP=%yyyy%-%mm%-%dd%_%hh%%nn%"
+set "NEWEXE=%APP_NAME%-%STAMP%.exe"
+
+rem --- Rename exe with timestamp ---
+if exist "%APP_NAME%.exe" (
+  ren "%APP_NAME%.exe" "%NEWEXE%"
+  echo [OK] Final EXE: %CD%\%NEWEXE%
+) else (
+  echo [!] Build finished but EXE not found.
 )
 
-echo [OK] Using Python launcher: %PYEXE%
-echo.
-
-:: ---------- 4) Install PyInstaller ----------
-echo [*] Upgrading pip...
-%PYEXE% -m pip install --upgrade pip
-
-echo [*] Installing PyInstaller...
-%PYEXE% -m pip install pyinstaller
-
-:: ---------- 5) Build ----------
-echo [*] Building exe with PyInstaller...
-%PYEXE% -m PyInstaller --noconfirm --onefile --windowed DellBiosTools.pyw
-
-if not exist "dist\DellBiosTools.exe" (
-  echo [!] Build failed!
-  pause
-  exit /b 1
-)
-
-:: ---------- 6) Move and Clean ----------
-echo [*] Moving exe to project root...
-copy /y "dist\DellBiosTools.exe" ".\DellBiosTools.exe"
-
-echo [*] Cleaning up temporary files...
-rmdir /s /q build
-rmdir /s /q dist
-del DellBiosTools.spec
-
-echo.
-echo ✅ Build complete! Your exe is ready:
-echo    %cd%\DellBiosTools.exe
 echo.
 pause
-endlocal
