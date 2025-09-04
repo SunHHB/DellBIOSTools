@@ -93,7 +93,7 @@ This tool combines four essential utilities for Dell BIOS management:
      - Load your Dell .bin file
      - Click "Extract Tags" (may take some time)
 
-4. Asset Manager (NEW in V2.1)
+4. Asset Manager (NEW in V2.3)
    - View and update Dell Asset Tag values directly
    - Useful for IT inventory, service tracking, and post-repair validation
    - Steps:
