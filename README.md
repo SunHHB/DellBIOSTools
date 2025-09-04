@@ -1,4 +1,4 @@
-DellBIOSTools V2.1
+DellBIOSTools V2.3
 ==================
 
 Requirements
