@@ -31,7 +31,7 @@ To create a standalone EXE without worrying about Python setup:
 
 When it finishes, you’ll see something like:
 
-    DellBiosTools-2025-09-03_0955.exe
+    DellBiosTools.exe
 
 in the same folder. ✅
 
