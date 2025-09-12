@@ -21,7 +21,7 @@ To create a standalone EXE without worrying about Python setup:
     builddellbiostools.bat
 
 3. The script will:
-   - Check if Python 3.12+ is installed
+   - Check if Python is installed
    - If missing, install it automatically
    - Upgrade pip and install PyInstaller
    - Compile DellBiosTools.pyw into a standalone EXE
