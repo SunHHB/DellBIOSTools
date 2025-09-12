@@ -9,7 +9,7 @@ import hashlib
 import ctypes
 import shlex
 from collections import defaultdict
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 
 ################################################################################
@@ -69,7 +69,97 @@ def log(msg: str):
         pass
     print(line)
 
-# —— CCTK discovery (CCTK-only) ——
+# Normalize returned asset strings (strip noise/placeholder values)
+def _normalize_asset(s: str) -> str:
+    s = (s or "").strip()
+    if not s:
+        return ""
+    bads = {
+        "none", "n/a", "na", "unknown", "to be filled by o.e.m.", "to be filled by oem",
+        "system manufactured", "not provided", "no asset tag"
+    }
+    if s.lower() in bads:
+        return ""
+    return s
+
+################################################################################
+# PowerShell CIM/WMI (READ path only — Win11-safe, no dcmscli)
+################################################################################
+
+def _find_powershell_exe() -> Optional[str]:
+    """
+    Return a usable PowerShell host:
+      - Windows PowerShell (System32 or Sysnative)
+      - PowerShell 7 (pwsh.exe) if present
+      - Or PATH
+    """
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    candidates = [
+        os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        os.path.join(system_root, "Sysnative", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        os.path.join(r"C:\Program Files\PowerShell", "7", "pwsh.exe"),
+        os.path.join(r"C:\Program Files\PowerShell", "7-preview", "pwsh.exe"),
+        os.path.join(r"C:\Program Files (x86)\PowerShell", "7", "pwsh.exe"),
+        "pwsh.exe", "powershell.exe", "pwsh", "powershell",
+    ]
+    for path in candidates:
+        try:
+            if os.path.sep in path:
+                if os.path.exists(path):
+                    return path
+            else:
+                p = subprocess.run([path, "-NoProfile", "-NoLogo", "-Command", "$PSVersionTable.PSEdition"],
+                                   capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if p.returncode == 0:
+                    return path
+        except Exception:
+            continue
+    return None
+
+def _run_powershell(ps_path: str, script: str):
+    exe = os.path.basename(ps_path).lower()
+    if "pwsh" in exe:
+        cmd = [ps_path, "-NoProfile", "-NoLogo", "-Command", script]
+    else:
+        cmd = [ps_path, "-NoProfile", "-NoLogo", "-ExecutionPolicy", "Bypass", "-Command", script]
+    return subprocess.run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+
+def get_asset_tag_cim_only() -> str:
+    """
+    Read AssetTag using PowerShell CIM first, then legacy WMI.
+    Avoids Dell WMI provider and dcmscli (Win11-friendly).
+    """
+    ps = _find_powershell_exe()
+    if not ps:
+        raise RuntimeError("PowerShell host not found (powershell.exe/pwsh.exe).")
+    scripts = [
+        # CIM (modern)
+        "$ErrorActionPreference='Stop'; "
+        "$t=(Get-CimInstance -ClassName Win32_SystemEnclosure | "
+        "Select-Object -ExpandProperty SMBIOSAssetTag); if ($t) { $t }",
+        # Legacy WMI
+        "$ErrorActionPreference='Stop'; "
+        "$t=(Get-WmiObject -Class Win32_SystemEnclosure).SMBIOSAssetTag; if ($t) { $t }",
+    ]
+    last_err = None
+    for sc in scripts:
+        try:
+            p = _run_powershell(ps, sc)
+            out = (p.stdout or "").strip()
+            if p.returncode == 0 and out:
+                tag = _normalize_asset(out.splitlines()[0])
+                if tag:
+                    return tag
+            if p.returncode != 0 and (p.stderr or "").strip():
+                last_err = (p.stderr or "").strip()
+        except Exception as e:
+            last_err = str(e)
+    raise RuntimeError(f"WMI/CIM AssetTag read failed. {last_err or 'No output.'}")
+
+################################################################################
+# —— CCTK discovery (WRITE path; also usable as read fallback) ——
+################################################################################
+
 REQUIRED_DLLS = ["BIOSIntf.dll"]  # minimal required; others vary by build
 
 def candidate_cctk_paths():
@@ -182,9 +272,10 @@ def _parse_asset_from_text(s: str) -> str:
         return lines[0].strip()
     return ""
 
-def get_asset_tag(cctk_path):
+def get_asset_tag_cctk(cctk_path):
     rc, out, err = run_cctk(cctk_path, ["--asset"])
     asset = _parse_asset_from_text(out) or _parse_asset_from_text(err)
+    asset = _normalize_asset(asset)
     if rc == 0 and asset:
         return asset
     raise RuntimeError(
@@ -491,7 +582,6 @@ class Tag1F5AEncoder(Tag595BEncoder):
                 elif which == 1: t = self.calculate(self.f3, ((j*5+1)&15), j)
                 elif which == 2: t = self.calculate(self.f4, ((j*3+5)&15), (k+0x20)&0xFFFFFFFF)
                 else: t = self.calculate(self.f5, ((j*7)&15), (k+0x30)&0xFFFFFFFF)
-                oldB = self.B
                 self.B, self.D, self.A = self.D, self.A, self.C
                 shift = rotationTable[which][(j &3)]
                 self.C = mask32(self.C + rol(t, shift))
@@ -693,7 +783,7 @@ def keygenDell(serial: str, tag: str, type_: int) -> List[str]:
             if i>= len(encBlock): encBlock.append(0)
         out_str1 = calculateE7A8(encBlock, TagE7A8Encoder)
         out_str2 = calculateE7A8(encBlock, TagE7A8EncoderSecond)
-        results = []; 
+        results = []
         if out_str1: results.append(out_str1)
         if out_str2: results.append(out_str2)
         return results
@@ -737,35 +827,43 @@ class BiosUnlockerTab:
     def __init__(self, parent):
         self.parent = parent
         self.frame = ttk.Frame(parent)
+
         tk.Label(self.frame, text="Select BIOS File:", font=("Arial", 10, "bold")).pack(pady=5)
         file_frame = tk.Frame(self.frame); file_frame.pack(pady=5)
         self.entry = tk.Entry(file_frame, width=50, borderwidth=0, font=("Arial", 9)); self.entry.pack(side=tk.LEFT, padx=5)
         tk.Button(file_frame, text="Browse", command=self.browse_file, bg="#4682B4", fg="white").pack(side=tk.RIGHT, padx=5)
+
         self.patch_button = tk.Button(self.frame, text="Patch BIOS", command=self.patch_bios,
                                       bg="white", fg="black", font=("Arial", 10, "bold"),
                                       padx=10, state=tk.DISABLED, borderwidth=1, relief="solid",
                                       activebackground="#E0E0E0")
         self.patch_button.pack(pady=10)
+
         log_frame = tk.Frame(self.frame, bg="#36454F"); log_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
         tk.Label(log_frame, text="Patching Log:", bg="#36454F", fg="white", anchor="w").pack(fill=tk.X)
         self.log_text = scrolledtext.ScrolledText(log_frame, height=18, state=tk.DISABLED, bg="black", fg="#00FF00", font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True)
+
         about_text = """ English Version of the Rex98-8FC8-Patcher
 Based on the original tool by Rex98 & Techshack Cebu
 Use with caution: Improper BIOS modification can damage your system."""
         tk.Label(self.frame, text=about_text, fg="#CCCCCC", font=("Arial", 8), justify=tk.LEFT).pack(pady=5)
+
         self.log_message("Welcome to Dell-8FC8-BIOS-UNLOCKER")
         self.log_message("This tool helps unlock Dell BIOS by patching specific patterns")
         self.log_message("Please select a BIOS file to begin")
         self.log_message("For password generation, use the Password Generator tab")
+
     def log_message(self, msg):
         self.log_text.config(state=tk.NORMAL); self.log_text.insert(tk.END, msg + "\n")
         self.log_text.see(tk.END); self.log_text.config(state=tk.DISABLED); self.parent.update()
+
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("BIOS Files", "*.bin *.rom *.fd *.bio"),("All Files", "*.*")])
         if file_path:
             self.entry.delete(0, tk.END); self.entry.insert(0, file_path)
             self.log_message(f"Selected file: {file_path}"); self.patch_button.config(text="Patch BIOS", state=tk.NORMAL)
+
     def patch_bios(self):
         file_path = self.entry.get()
         if not file_path or not os.path.exists(file_path):
@@ -775,6 +873,7 @@ Use with caution: Improper BIOS modification can damage your system."""
             with open(file_path, "rb") as f: bios_data = bytearray(f.read())
             file_name = os.path.basename(file_path); file_size = len(bios_data)
             self.log_message(f"Loaded BIOS file: {file_name} (Size: {file_size} bytes)")
+
             intel_signature = convert_hex_to_bytes("5AA5F00F03")
             self.log_message("Searching for Intel signature...")
             intel_offset = find_intel_signature(bios_data, intel_signature)
@@ -783,6 +882,7 @@ Use with caution: Improper BIOS modification can damage your system."""
             else:
                 self.log_message("Intel signature not found")
                 messagebox.showerror("Error", "Intel signature not found. This may not be a valid BIOS file."); return
+
             self.log_message("Checking for first pattern...")
             first_pattern = r"^00FCAA[0-9A-F]{2,4}000000[0-9A-F]{2,}.*$"
             first_replace_bytes = convert_hex_to_bytes("00FC00")
@@ -790,6 +890,7 @@ Use with caution: Improper BIOS modification can damage your system."""
             for offset in first_offsets:
                 self.log_message(f"Pattern found at offset 0x{offset:X} and replaced.")
                 bios_data[offset:offset+6] = first_replace_bytes + bytes([0] * (6 - len(first_replace_bytes)))
+
             self.log_message("Almost done! Checking second pattern...")
             second_pattern = r"^00FDAA[0-9A-F]{2,4}000000[0-9A-F]{2,}.*$"
             second_replace_bytes = convert_hex_to_bytes("00FD00")
@@ -797,6 +898,7 @@ Use with caution: Improper BIOS modification can damage your system."""
             for offset in second_offsets:
                 self.log_message(f"Pattern found at offset 0x{offset:X} and replaced.")
                 bios_data[offset:offset+6] = second_replace_bytes + bytes([0] * (6 - len(second_replace_bytes)))
+
             if first_offsets or second_offsets:
                 patched_file_path = os.path.join(os.path.dirname(file_path), f"patched_{file_name}")
                 with open(patched_file_path, "wb") as f: f.write(bios_data)
@@ -819,20 +921,27 @@ class PasswordGeneratorTab:
         self.parent = parent
         self.frame = ttk.Frame(parent)
         frame = tk.Frame(self.frame, padx=10, pady=10); frame.pack(expand=True)
+
         tk.Label(frame, text="Dell BIOS Password Generator", font=("Arial", 12, "bold")).pack(pady=10)
         tk.Label(frame, text="Enter 7-character Service Tag followed by 4-character Tag suffix\n(Example: 1A2B3C4595B)", justify=tk.CENTER).pack(pady=5)
+
         input_frame = tk.Frame(frame); input_frame.pack(pady=10)
         tk.Label(input_frame, text="Service Tag + Suffix:").pack(side=tk.LEFT)
         self.user_input = tk.Entry(input_frame, width=20); self.user_input.pack(side=tk.LEFT, padx=5)
+
         tags_frame = tk.Frame(frame); tags_frame.pack(pady=5)
         tk.Label(tags_frame, text="Common Tags:").pack(side=tk.LEFT)
         tk.Label(tags_frame, text="595B, D35B, 2A7B, 1D3B, 1F66, 6FF1, 1F5A, BF97, E7A8", fg="blue").pack(side=tk.LEFT, padx=5)
+
         tk.Button(frame, text="Compute Password", command=self.compute_password, bg="#4682B4", fg="white").pack(pady=10)
+
         result_frame = tk.Frame(frame); result_frame.pack(pady=10, fill=tk.X)
         tk.Label(result_frame, text="Password:").pack(side=tk.LEFT)
         self.result_display = tk.Entry(result_frame, width=30, state="readonly"); self.result_display.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
         note_text = "Note: For 8FC8 suffixes, use the 'BIOS Unlocker' tool instead."
         tk.Label(frame, text=note_text, fg="red", font=("Arial", 9)).pack(pady=5)
+
         info_frame = tk.Frame(frame); info_frame.pack(pady=10, fill=tk.BOTH, expand=True)
         info_text = """Instructions:
 1. Enter your 7-character Dell Service Tag followed by a 4-character tag suffix
@@ -841,6 +950,7 @@ class PasswordGeneratorTab:
 
 Warning: Use at your own risk. Incorrect BIOS passwords can lock your system."""
         tk.Label(info_frame, text=info_text, justify=tk.LEFT, font=("Arial", 9)).pack(anchor=tk.W)
+
     def compute_password(self):
         text = self.user_input.get().strip()
         self.result_display.config(state=tk.NORMAL); self.result_display.delete(0, tk.END)
@@ -855,27 +965,34 @@ class ServiceTagExtractorTab:
     def __init__(self, parent):
         self.parent = parent
         self.frame = ttk.Frame(parent)
+
         tk.Label(self.frame, text="Select BIOS File (.bin):", font=("Arial", 10, "bold")).pack(pady=5)
         file_frame = tk.Frame(self.frame); file_frame.pack(pady=5)
         self.entry = tk.Entry(file_frame, width=50, borderwidth=0, font=("Arial", 9)); self.entry.pack(side=tk.LEFT, padx=5)
         tk.Button(file_frame, text="Browse", command=self.browse_file, bg="#4682B4", fg="white").pack(side=tk.RIGHT, padx=5)
+
         self.scan_button = tk.Button(self.frame, text="Extract Tags", command=self.extract_tags,
                                      bg="white", fg="black", font=("Arial", 10, "bold"),
                                      padx=10, state=tk.DISABLED, borderwidth=1, relief="solid")
         self.scan_button.pack(pady=10)
+
         log_frame = tk.Frame(self.frame, bg="#36454F"); log_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
         tk.Label(log_frame, text="Extractor Log:", bg="#36454F", fg="white", anchor="w").pack(fill=tk.X)
         self.log_text = scrolledtext.ScrolledText(log_frame, height=18, state=tk.DISABLED, bg="black", fg="#00FF00", font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True)
+
         self.log_message("Ready to extract Service Tags from BIOS dump")
+
     def log_message(self, msg):
         self.log_text.config(state=tk.NORMAL); self.log_text.insert(tk.END, msg + "\n")
         self.log_text.see(tk.END); self.log_text.config(state=tk.DISABLED); self.parent.update()
+
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("BIOS Files", "*.bin *.rom *.fd *.bio"),("All Files", "*.*")])
         if file_path:
             self.entry.delete(0, tk.END); self.entry.insert(0, file_path)
             self.log_message(f"Selected file: {file_path}"); self.scan_button.config(text="Extract Tags", state=tk.NORMAL)
+
     def extract_tags(self):
         file_path = self.entry.get()
         if not file_path or not os.path.exists(file_path):
@@ -901,6 +1018,7 @@ class ServiceTagExtractorTab:
             self.log_message(f"   Region Range: 0x{min(most_common[1]):08X} – 0x{max(most_common[1]):08X}")
         except Exception as e:
             self.log_message(f"[ERROR] {e}")
+
     def is_ascii_upper_alnum_utf16le(self, data):
         if len(data) != 14: return False
         for i in range(0, 14, 2):
@@ -910,92 +1028,100 @@ class ServiceTagExtractorTab:
         return True
 
 class AssetManagerTab:
-    """CCTK-only: read/set BIOS Asset Tag via Dell CCTK; optional reboot to BIOS."""
+    """Hybrid UI: READ via CIM/WMI (Win11-safe), fallback to CCTK; WRITE via CCTK."""
     def __init__(self, parent):
         self.parent = parent
         self.frame = ttk.Frame(parent)
-        wrap = tk.Frame(self.frame, padx=12, pady=12); wrap.pack(fill=tk.BOTH, expand=True)
-        tk.Label(wrap, text="Dell Asset Tag Manager (CCTK)", font=("Arial", 12, "bold")).pack(pady=(0,10))
 
-        path_row = tk.Frame(wrap); path_row.pack(fill=tk.X, pady=(0,6))
-        tk.Label(path_row, text="CCTK bundle location:", width=22, anchor="w").pack(side=tk.LEFT)
-        self.cctk_path_var = tk.StringVar(value="")
-        tk.Entry(path_row, textvariable=self.cctk_path_var, state="readonly").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-        tk.Button(path_row, text="Detect", command=self.detect_cctk).pack(side=tk.LEFT)
-        tk.Button(path_row, text="Browse…", command=self.browse_cctk).pack(side=tk.LEFT, padx=6)
+        wrap = tk.Frame(self.frame, padx=12, pady=12)
+        wrap.pack(fill=tk.BOTH, expand=True)
 
-        cur_row = tk.Frame(wrap); cur_row.pack(fill=tk.X, pady=(6,6))
+        tk.Label(wrap, text="Asset Tag Manager", font=("Arial", 12, "bold")).pack(pady=(0,10))
+
+        # Current tag
+        cur_row = tk.Frame(wrap); cur_row.pack(fill=tk.X, pady=(0,6))
         tk.Label(cur_row, text="Current Asset Tag:", width=22, anchor="w").pack(side=tk.LEFT)
         self.current_var = tk.StringVar(value="(unknown)")
-        tk.Entry(cur_row, textvariable=self.current_var, state="readonly", width=32).pack(side=tk.LEFT, padx=6)
+        tk.Entry(cur_row, textvariable=self.current_var, state="readonly", width=32)\
+            .pack(side=tk.LEFT, padx=6)
 
+        # New tag
         new_row = tk.Frame(wrap); new_row.pack(fill=tk.X, pady=(0,6))
         tk.Label(new_row, text="New Asset Tag:", width=22, anchor="w").pack(side=tk.LEFT)
         self.new_entry = tk.Entry(new_row, width=32); self.new_entry.pack(side=tk.LEFT, padx=6)
 
+        # Optional setup password
         pwd_row = tk.Frame(wrap); pwd_row.pack(fill=tk.X, pady=(0,6))
         tk.Label(pwd_row, text="Setup Password (optional):", width=22, anchor="w").pack(side=tk.LEFT)
         self.pwd_entry = tk.Entry(pwd_row, width=32, show="*"); self.pwd_entry.pack(side=tk.LEFT, padx=6)
 
+        # Buttons
         btns = tk.Frame(wrap); btns.pack(pady=10)
         tk.Button(btns, text="Refresh", command=self.refresh_asset).pack(side=tk.LEFT, padx=5)
         tk.Button(btns, text="Update Asset Tag", command=self.update_asset).pack(side=tk.LEFT, padx=5)
         tk.Button(btns, text="Restart → BIOS", command=self.reboot_bios).pack(side=tk.LEFT, padx=5)
 
-        note = tk.Label(wrap, fg="#888",
-                        text="Requires Dell Command | Configure (cctk.exe + BIOSIntf.dll). "
-                             "In WinPE, HAPI will be installed automatically if present.")
-        note.pack(pady=(6,0), anchor="w")
+        # Internal: keep path if we detect it once (not shown in UI)
+        self.cctk_path: Optional[str] = None
 
-        self.cctk_path = None
-        self.detect_cctk()  # auto-detect and auto-refresh
-
-    def browse_cctk(self):
-        exe = filedialog.askopenfilename(
-            title="Select cctk.exe",
-            filetypes=[("cctk.exe", "cctk.exe"), ("All files", "*.*")]
-        )
-        if exe and os.path.basename(exe).lower() == "cctk.exe":
-            folder = os.path.dirname(exe)
-            if not os.path.exists(os.path.join(folder, "BIOSIntf.dll")):
-                messagebox.showwarning("Bundle incomplete", "BIOSIntf.dll not found next to cctk.exe")
-            self.cctk_path = exe
-            self.cctk_path_var.set(exe)
-            os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
-            ensure_hapi_present(folder)
-            self.refresh_asset()
-
-    def detect_cctk(self):
+        # Auto-refresh once
         try:
-            cctk_path, folder = find_cctk_bundle()
-            self.cctk_path = cctk_path
-            self.cctk_path_var.set(cctk_path)
-            ensure_hapi_present(folder)   # CCTK prereqs only
-            self.refresh_asset()          # CCTK-only read
-        except Exception as e:
-            self.cctk_path = None
-            self.cctk_path_var.set("")
-            messagebox.showerror("CCTK not found", str(e))
+            self.refresh_asset()
+        except Exception:
+            pass
+
+    def _ensure_cctk(self):
+        if self.cctk_path and os.path.exists(self.cctk_path):
+            return
+        cctk_path, folder = find_cctk_bundle()
+        self.cctk_path = cctk_path
+        ensure_hapi_present(folder)
 
     def refresh_asset(self):
-        if not self.cctk_path:
-            self.detect_cctk()
-            if not self.cctk_path: return
+        """
+        Read via CIM/WMI first (Win11-safe), then fall back to CCTK if CIM fails.
+        """
         try:
-            tag = get_asset_tag(self.cctk_path)   # CCTK-only
+            tag = get_asset_tag_cim_only()
             self.current_var.set(tag if tag else "(empty)")
-            log(f"Read Asset Tag: {tag}")
+            log(f"WMI/CIM AssetTag read OK: {tag}")
+            return
         except Exception as e:
-            messagebox.showerror("CCTK Error", str(e))
+            log(f"WMI/CIM AssetTag read failed: {e}")
+            cim_err = e
+
+        # CCTK fallback read
+        try:
+            self._ensure_cctk()
+            tag2 = get_asset_tag_cctk(self.cctk_path)
+            self.current_var.set(tag2 if tag2 else "(empty)")
+            log(f"CCTK AssetTag read OK: {tag2}")
+        except Exception as e2:
+            messagebox.showerror(
+                "Read failed",
+                f"Could not read Asset Tag.\n\nCIM/WMI error:\n{cim_err}\n\n"
+                f"CCTK fallback error:\n{e2}"
+            )
 
     def update_asset(self):
-        if not self.cctk_path:
-            self.detect_cctk()
-            if not self.cctk_path: return
+        """
+        Set via CCTK. Auto-detect CCTK when needed.
+        """
         new_tag = self.new_entry.get().strip()
         setup_pwd = self.pwd_entry.get().strip() or None
         if not new_tag:
-            messagebox.showwarning("Missing value", "Enter the new Asset Tag."); return
+            messagebox.showwarning("Missing value", "Enter the new Asset Tag.")
+            return
+        try:
+            self._ensure_cctk()
+        except Exception as e:
+            messagebox.showerror(
+                "CCTK required",
+                "To set the Asset Tag you need Dell Command | Configure (cctk.exe + BIOSIntf.dll).\n\n"
+                f"{e}"
+            )
+            return
+
         try:
             set_asset_tag(self.cctk_path, new_tag, setup_pwd)
             self.current_var.set(new_tag)
@@ -1015,14 +1141,16 @@ class AssetManagerTab:
 class DellToolsApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Dell BIOS Tools.V2.3")
+        self.root.title("Dell BIOS Tools.V2.5 (Hybrid)")
         self.root.geometry("700x620")
         self.root.configure(bg="#36454F")
+
         self.notebook = ttk.Notebook(root); self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.unlocker_tab = BiosUnlockerTab(self.notebook)
         self.password_tab = PasswordGeneratorTab(self.notebook)
         self.service_tag_tab = ServiceTagExtractorTab(self.notebook)
         self.asset_tab = AssetManagerTab(self.notebook)
+
         self.notebook.add(self.unlocker_tab.frame, text="BIOS Unlocker")
         self.notebook.add(self.password_tab.frame, text="Password Generator")
         self.notebook.add(self.service_tag_tab.frame, text="Service Tag Extractor")
