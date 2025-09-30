@@ -3,7 +3,7 @@ DellBIOSTools V2.3
 
 Requirements
 ------------
-- Python 3.12 or greater is required to run the raw Python code (DellBiosTools.pyw)
+- Python 3.11 or greater is required to run the raw Python code (DellBiosTools.pyw)
 - Windows 10/11 recommended for EXE build and usage
 
 Preview
