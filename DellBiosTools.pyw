@@ -1141,7 +1141,7 @@ class AssetManagerTab:
 class DellToolsApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Dell BIOS Tools.V2.5 (Hybrid)")
+        self.root.title("Dell BIOS Tools.V2.5")
         self.root.geometry("700x620")
         self.root.configure(bg="#36454F")
 
