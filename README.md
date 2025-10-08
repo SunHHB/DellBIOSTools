@@ -125,6 +125,6 @@ MIT — free to use, share, and modify
 ------------------------------------------------------------
 Credits
 
-- Original tools by Rex98 & Techshack Cebu
+- Original Bios Unlocker tool by Rex98 & Techshack Cebu
 - Research by Dogbert and Asyncritus
 - Python scripts courtesy of chromebreakerdev
