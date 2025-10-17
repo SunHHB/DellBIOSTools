@@ -1,19 +1,26 @@
 DellBIOSTools V2.5
-==================
 
+
+https://github.com/user-attachments/assets/73d3720e-0390-4011-ae4d-b0e051ed31b1
+
+
+==================
 Requirements
 ------------
 - Python 3.11 or greater is required to run the raw Python code (DellBiosTools.pyw)
 - Windows 10/11 recommended for EXE build and usage
 
 Preview
--------
-https://github.com/user-attachments/assets/b83312c3-4174-4e01-85b5-47fa5a0c7f03
 
 ------------------------------------------------------------
 🚀 Quick Build (Recommended)
 
+
 To create a standalone EXE without worrying about Python setup:
+
+
+
+
 
 1. Download this repo as ZIP and extract it.
 2. Double-click:
